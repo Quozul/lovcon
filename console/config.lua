@@ -3,4 +3,5 @@ return {
     width = 600,
     font = nil,
     limit = nil, -- limit of logs, nil for no limit
+    openkey = "F1",
 }

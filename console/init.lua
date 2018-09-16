@@ -10,7 +10,7 @@ local window_width, window_height = love.window.getMode()
 local console_x, console_y = window_width / 2 - console_width / 2, window_height / 2 - console_height / 2
 local console_font = console.config.font or love.graphics.getFont()
 local lineheight, timewidth = console_font:getHeight() + 4, console_font:getWidth("00:00:00")
-local console_loglimit = console.config.limit
+local console_loglimit, console_openkey = console.config.limit, console.config.openkey or "F1"
 
 local console_magnetized = false
 local console_oldsize = {width = console_width, height = console_height}
@@ -231,7 +231,7 @@ function console.runcommand()
 end
 
 function console.keypressed(key)
-    if key == "f1" then
+    if key == console_openkey then
         console_hidden = not console_hidden
 
         if not console_hidden then

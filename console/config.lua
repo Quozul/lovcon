@@ -3,5 +3,6 @@ return {
     width = 600,
     font = nil,
     limit = nil, -- limit of logs, nil for no limit
-    openkey = "F1",
+    openkey = "f1", -- default key to open the console
+    cursors = true, -- toggle the console's cursors
 }

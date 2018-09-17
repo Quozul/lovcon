@@ -11,6 +11,8 @@ console.print(str)
 exemple_thread = love.thread.newThread(code)
 
 function love.load()
+    console.registercallbacks()
+    
     console.print("Game loaded")
     console.print("Here is a fancy console")
     console.print("This console support multi-\nlines prints!! This is really cool!")
@@ -34,8 +36,6 @@ local fps_hidden, fps_hiddencount = 0, 0
 local tick, tickRate = 0, 1
 
 function love.update(dt)
-    console.update(dt)
-
     tick = tick + dt
 
     if tick >= tickRate and record_fps then
@@ -61,38 +61,8 @@ function love.update(dt)
     end
 end
 
-function love.textinput(text)
-    console.text(text)
-end
-
 function love.keypressed(key)
     if key == "f2" then record_fps = not record_fps end
-    console.keypressed(key)
-end
-
-function love.wheelmoved(x, y)
-    console.mousewheel(x, y)
-end
-
-function love.mousemoved(x, y, dx, dy)
-    console.mousemoved(x, y, dx, dy)
-end
-
-function love.mousepressed(x, y, button)
-    console.mousepressed(x, y, button)
-end
-
-function love.mousereleased(x, y, button)
-    console.mousereleased(x, y)
-end
-
-function love.resize(width, height)
-    window_width, window_height = width, height
-    console.resize(width, height)
-end
-
-function love.mousefocus(focus)
-    console.mousefocus(focus)
 end
 
 local text = [[Hey! I'm a text behind the console,
@@ -114,6 +84,4 @@ function love.draw()
     love.graphics.print(round(fpshide, 1), 150, 15)
     love.graphics.print(round((fpsshow - fpshide) / math.max(fpsshow, fpshide) * 100, 2) .. "%", 150, 25)
     love.graphics.print(love.timer.getFPS(), 150, 35)
-
-    console.draw()
 end

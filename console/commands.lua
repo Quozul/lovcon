@@ -1,10 +1,6 @@
---[[ You can add a memory to your commands by adding a "memory" variable,
-    the value of this variable will be used when creating the memory.
-
-    When the command is executed, "command", "args" and "memory" are parsed.
-
-    You can add a function for the command that will be executed in love.update with "dt" and "memory" are parsed.
-]]
+--[[ This file include a few exemple of commands that you can make with this console
+     The full documentation can be found on the wiki:
+     https://github.com/Quozul/lovcon/wiki ]]
 
 return {
     lua = {

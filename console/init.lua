@@ -4,13 +4,14 @@ console_channel = love.thread.newChannel()
 local console = {}
 
 -- load config
-console.config = love.filesystem.load("console/config.lua")()
-local console_width, console_height = console.config.width, console.config.height
+local console_config = love.filesystem.load("console/config.lua")()
+local console_width, console_height = console_config.width, console_config.height
 local window_width, window_height = love.window.getMode()
 local console_x, console_y = window_width / 2 - console_width / 2, window_height / 2 - console_height / 2
-local console_font = console.config.font or love.graphics.getFont()
+local console_font = console_config.font or love.graphics.getFont()
 local lineheight, timewidth = console_font:getHeight() + 4, console_font:getWidth("00:00:00")
-local console_loglimit, console_openkey = console.config.limit, console.config.openkey or "F1"
+local console_loglimit, console_openkey = console_config.limit, console_config.openkey or "f1"
+local console_cursors = console_config.cursors
 
 local console_magnetized = false
 local console_oldsize = {width = console_width, height = console_height}
@@ -310,7 +311,7 @@ function console.keypressed(key)
 end
 
 local maxcmdlen = console_width - 127
-function console.text(text)
+function console.textinput(text)
     if not console.hasfocus() or not console_readyforinput then return end
 
     tabswitch = false
@@ -322,10 +323,15 @@ end
 
 function console.hasfocus()
     local mx, my = love.mouse.getPosition()
-    return inSquare(mx, my, console_x, console_y, console_width, console_height) and console_show
+    if console_show then
+        if inSquare(mx, my, console_x, console_y, console_width, console_height) then
+            return true
+        end
+    end
+    return false
 end
 
-function console.mousewheel(x, y)
+function console.wheelmoved(x, y)
     if not console.hasfocus() then return end
 
     desiredhistorydisplayed = math.between(desiredhistorydisplayed + y * lineheight / 2, -#logs * lineheight + lineheight - padding, print_size)
@@ -361,18 +367,20 @@ function console.mousemoved(mx, my, dx, dy)
     end
 
     -- cursors
-    if inSquare(mx, my, console_x + console_width - 16, console_y + console_height - 16, 24, 24) then
-        setCursor(resize) -- bottom right corner
-    elseif inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then
-        setCursor(pointer) -- on cross button
-    elseif inSquare(mx, my, console_x + 4, console_y + console_height - 48, console_width - 127, 28) then
-        setCursor(ibeam) -- in text input
-    elseif inSquare(mx, my, console_x, console_y, console_width, 50) then
-        setCursor(hand) -- on console top
-    elseif inSquare(mx, my, console_x + console_width - 123, console_y + console_height - 48, 119, 28) or suggestionsfocus then
-        setCursor(pointer) -- on execute button or on suggested commands
-    else
-        setCursor(arrow)
+    if console_cursors then
+        if inSquare(mx, my, console_x + console_width - 16, console_y + console_height - 16, 24, 24) then
+            setCursor(resize) -- bottom right corner
+        elseif inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then
+            setCursor(pointer) -- on cross button
+        elseif inSquare(mx, my, console_x + 4, console_y + console_height - 48, console_width - 127, 28) then
+            setCursor(ibeam) -- in text input
+        elseif inSquare(mx, my, console_x, console_y, console_width, 50) then
+            setCursor(hand) -- on console top
+        elseif inSquare(mx, my, console_x + console_width - 123, console_y + console_height - 48, 119, 28) or suggestionsfocus then
+            setCursor(pointer) -- on execute button or on suggested commands
+        else
+            setCursor(arrow)
+        end
     end
 end
 
@@ -467,6 +475,8 @@ local function drop_console(mx)
         elseif mx and mx >= window_width - 50 and console_x + console_width == window_width then
             magnetize_console("right")
         end
+
+        setCursor(hand)
     end
 
     console_grabbed = false
@@ -706,6 +716,18 @@ function console.draw()
     love.graphics.rectangle("fill", 0, scrollbar_y, 8, scrollbar_height)
 
     love.graphics.origin()
+end
+
+local callbacks = {"update", "textinput", "keypressed", "wheelmoved", "mousepressed", "mousereleased", "resize", "mousefocus", "draw", "mousemoved"}
+function console.registercallbacks()
+	local registry = {}
+    for _, f in ipairs(callbacks) do
+        registry[f] = love[f] or function() end
+        love[f] = function(...)
+            registry[f](...)
+			console[f](...)
+		end
+	end
 end
 
 return console

@@ -54,19 +54,20 @@ local corner = love.graphics.newImage("data/console/corner.png")
 local return_arrow = love.graphics.newImage("data/console/return.png")
 
 local logs, wrapped_logs = {}, {}
-local command, waiting_input, lastcommand, waiting_type, historypos = "", "_", {}, "_", 1
+local command, waiting_input, lastcommand, waiting_type, historypos = "", "_", {}, "_", 0
 local time = 0
 local cursor_pos = 0
-local repeated = {}
 local historydisplayed, desiredhistorydisplayed = 0, lineheight
 local tabpos = 1 -- used when tabulation is pressed
 
 local scrollbar_height, scrollbar_y, scrollbar_grabbed = 0, 0, false
 
-function setCursor(cursor)
+-- more usefull functions, but thoses are more specific to the project
+local function setCursor(cursor) -- shortcut
     love.mouse.setCursor(cursor)
 end
 
+-- logs must be wrapped in order to display multi-line logs
 local function wraplogs()
     wrapped_logs = {}
     for _, log in pairs(logs) do
@@ -75,15 +76,39 @@ local function wraplogs()
     end
 end
 
+-- convert the logs to string, you should use console.getlogs() function instead
+local function logToString(logs)
+    local str = ""
+    for _, log in pairs(logs) do
+        str = str .. ("%s %s [%s]: %s\n"):format(log.time, log.from, log.letter, log.event)
+    end
+    return str
+end
+
+-- look for the closests values
+local function completeValue(value, t)
+    local closests = {}
+    for index, name in pairs(t) do
+        if name:sub(1, value:len()) == value then
+            table.insert(closests, name)
+        end
+    end
+
+    if closests ~= {} then return closests end
+    return false
+end
+
 function console.print(str, type)
+    -- get the traceback
     local traceback = ((debug.traceback(""):gsub("stack traceback:","")):split("\n")[2])
-    local from_file = ("%s:%s"):format( -- this line is wtf
+    local from_file = ("%s:%s"):format(
         (((traceback:split(":")[1]):gsub("\9","")):gsub(".lua","")),
         (((traceback:split(":")[2])))
     )
 
     str = tostring(str)
 
+    -- get the type of the log and sets its colour
     local letter = "i"
     if type == "debug" or type == 1 then
         type = {99, 57, 116}
@@ -98,8 +123,9 @@ function console.print(str, type)
     local width, text = console_font:getWrap(str, console_width - timewidth - 12)
     desiredhistorydisplayed = desiredhistorydisplayed - lineheight * #text
 
-    local time = os.date("%H:%M:%S")
+    local time = os.date("%H:%M:%S") -- get a formatted time
 
+    -- prints the log to the console
     print( ("%s %s [%s]: %s"):format(time, from_file, letter, str) )
 
     logs[#logs + 1] = {
@@ -110,6 +136,7 @@ function console.print(str, type)
         letter = letter,
     }
 
+    -- if the limit of logs is reached
     if console_loglimit and #logs > console_loglimit then
         table.remove(logs, 1) -- removes the first element from the logs
     end
@@ -120,9 +147,10 @@ end
 function console.getlogs() return logToString(logs) end
 
 function console.update(dt)
+    -- get the logs from threads
     local thread_log = love.thread.getChannel("console_channel"):pop()
     if thread_log then
-        logs[#logs + 1] = thread_log
+        logs[#logs + 1] = thread_log -- add the logs to the history
         wraplogs()
 
         local width, text = console_font:getWrap(thread_log.event, console_width - timewidth - 12)
@@ -136,7 +164,8 @@ function console.update(dt)
         end
     end
 
-    if not console_show then setCursor(arrow) return end
+    if not console_show then return end
+    -- everything bellow will not be executed if the console isn't shown
 
     local difference = desiredhistorydisplayed - historydisplayed
     if difference ~= 0 then
@@ -179,13 +208,15 @@ function console.update(dt)
 end
 
 function console.addtomemory(instruction, name, value)
-    if not name or not value then return end
+    if instruction == nil or name == nil then return false end
     console_memory[instruction][name] = value
+    return true
 end
 
 function console.remfrommemory(instruction, name)
-    if not console_memory[instruction][name] then return end
+    if not console_memory[instruction][name] then return false end
     console_memory[instruction][name] = nil
+    return true
 end
 
 function console.resize(width, height)
@@ -225,9 +256,8 @@ function console.runcommand()
         console.print("List of valid commands: " .. commandlist_text, 2)
     end
 
-    command = ""
-    cursor_pos = 0
-    tabpos = 1
+    command, cursor_pos = "", 0
+    tabpos = 1 -- reset the position of the tab shortcut
     historydisplayed = historydisplayed - lineheight
 end
 
@@ -252,23 +282,21 @@ function console.keypressed(key)
     if not console.hasfocus() or not console_readyforinput then return end
 
     if key == "return" or key == "kpenter" then
-        console.runcommand()
+        console.runcommand() -- run the command
     elseif key == "backspace" then
         if cursor_pos ~= 0 then
             command = command:remove(cursor_pos) -- delete backward
             cursor_pos = math.max(cursor_pos - 1, 0)
-            tabswitch = false
         end
     elseif key == "delete" then
         command = command:remove(cursor_pos, true) -- delete forward
-        tabswitch = false
     elseif key == "up" then
         historypos = math.max(historypos - 1, 1)
-        command = lastcommand[historypos] or ""
+        command = lastcommand[historypos] or "" -- sets the command to the latest one
         cursor_pos = command:len() or 0
     elseif key == "down" then
         historypos = math.min(historypos + 1, #lastcommand + 1)
-        command = lastcommand[historypos] or ""
+        command = lastcommand[historypos] or "" -- sets the command to the newest one
         cursor_pos = command:len() or 0
     elseif key == "left" then
         cursor_pos = math.between(cursor_pos - 1, 0, command:len())
@@ -278,7 +306,7 @@ function console.keypressed(key)
         command = command .. love.system.getClipboardText()
         cursor_pos = command:len()
     elseif key == "tab" then
-        if #suggestedcommands > 0 then
+        if #suggestedcommands > 0 then -- go throught all the suggested commands
             if tabpos > #suggestedcommands then
                 tabpos = 1
             end
@@ -314,7 +342,6 @@ local maxcmdlen = console_width - 127
 function console.textinput(text)
     if not console.hasfocus() or not console_readyforinput then return end
 
-    tabswitch = false
     command = command:insert(cursor_pos, text)
     cursor_pos = cursor_pos + 1
 
@@ -358,15 +385,16 @@ function console.mousemoved(mx, my, dx, dy)
     elseif console_cornergrabbed then
         console_width = math.max(mx - console_x, 420)
         console_height = math.max(my - console_y, 210)
+
         wraplogs()
-    elseif scrollbar_grabbed then
+    elseif scrollbar_grabbed then -- this isn't very precise yet unfortunatly
         local nd = desiredhistorydisplayed - dy * (#logs * (lineheight * 2) / print_size)
         desiredhistorydisplayed = math.between(nd, -#logs * lineheight + lineheight - padding, print_size)
     elseif not console.hasfocus() then
         console_readyforinput = false
     end
 
-    -- cursors
+    -- if the cursors are enabled for the console, then change them
     if console_cursors then
         if inSquare(mx, my, console_x + console_width - 16, console_y + console_height - 16, 24, 24) then
             setCursor(resize) -- bottom right corner
@@ -388,17 +416,15 @@ function console.mousepressed(mx, my, button)
     if not console.hasfocus() then return end
 
     if button == 1 and (not console_grabbed or not console_scrollgrabbed) then
-        if inSquare(mx, my, console_x + console_width - 123, console_y + console_height - 48, 119, 28) then
-            console.runcommand() -- on execute button
-        elseif inSquare(mx, my, console_x + console_width - 16, console_y + console_height - 16, 24, 24) then
-            console_cornergrabbed, console_readyforinput = true, false -- on corner
-        elseif inSquare(mx, my, console_x, console_y, console_width, 50) and not inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then
-            console_grabbed, console_readyforinput = true, false -- on window top
+        if inSquare(mx, my, console_x + console_width - 123, console_y + console_height - 48, 119, 28) then -- on execute button
+            console.runcommand()
+        elseif inSquare(mx, my, console_x + console_width - 16, console_y + console_height - 16, 24, 24) then -- on bottom-right corner
+            console_cornergrabbed, console_readyforinput = true, false
+        elseif inSquare(mx, my, console_x, console_y, console_width, 50) and not inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then -- on window top
+            console_grabbed, console_readyforinput = true, false
             console_grabpoints = {x = mx - console_x, y = my - console_y}
-        elseif inSquare(mx, my, console_x + 4, console_y + console_height - 48, console_width - 127, 28) then
-            console_readyforinput = true -- on text input
-
-            if console_readyforinput and command ~= "" then
+        elseif inSquare(mx, my, console_x + 4, console_y + console_height - 48, console_width - 127, 28) then -- on text input
+            if console_readyforinput and command ~= "" then -- sets the position of the cursor relative to the mouse, between chracters
                 local remchars = 0
                 local command_length = console_font:getWidth(command:sub(1, remchars))
 
@@ -423,6 +449,8 @@ function console.mousepressed(mx, my, button)
                 waiting_input = waiting_type
                 time = 0
             end
+
+            console_readyforinput = true
         elseif inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then -- on close button
             console_grabbed = false
             console_hidden = true
@@ -490,8 +518,8 @@ end
 
 function console.mousereleased(mx, my)
     drop_console(mx)
-    console_x, console_y = round(console_x, 0), round(console_y, 0)
-    console_width, console_height = round(console_width, 0), round(console_height, 0)
+    console_x, console_y = math.round(console_x, 0), math.round(console_y, 0)
+    console_width, console_height = math.round(console_width, 0), math.round(console_height, 0)
 
     scrollbar_grabbed = false
 
@@ -579,7 +607,7 @@ function console.draw()
                 end
             end
 
-            love.graphics.print(log.time, console_x + 4, round(log_y + log_height / 2 - console_font:getHeight(log.time) / 2, 1))
+            love.graphics.print(log.time, console_x + 4, math.round(log_y + log_height / 2 - console_font:getHeight(log.time) / 2, 1))
         end
     end
 
@@ -637,7 +665,7 @@ function console.draw()
     setconsolecolor(100, 106, 116, 1)
     love.graphics.rectangle("fill", console_x + console_width - 123, console_y + console_height - 48, 119, 28) -- execute command button
     setconsolecolor(255, 255, 255, 1)
-    love.graphics.print("Execute", console_x + console_width - 115 + round(console_font:getWidth("Execute") / 2, 0), console_y + console_height - 42) -- execute button text
+    love.graphics.print("Execute", console_x + console_width - 115 + math.round(console_font:getWidth("Execute") / 2, 0), console_y + console_height - 42) -- execute button text
 
     -- draw command
     love.graphics.print(command, console_x + 8, console_y + console_height - 42)
@@ -678,7 +706,7 @@ function console.draw()
                 local x2, y2 = x + original_x + console_width / 2, y + original_y + console_height / 2
                 if inSquare(mx, my, x2, y2, width, height) then
                     setconsolecolor(52, 55, 57, 1)
-                    local hovering = trunc((my - y2 - 1) / lineheight)
+                    local hovering = math.trunc((my - y2 - 1) / lineheight)
                     love.graphics.rectangle("fill", x, y + hovering * lineheight, width, lineheight)
 
                     if love.mouse.isDown(1) then
@@ -693,7 +721,7 @@ function console.draw()
 
                 setconsolecolor(255, 255, 255, 1)
                 for index, name in pairs(suggestedcommands) do
-                    love.graphics.print(name, x + 4, round(y + (index - 1) * lineheight + 2, 0))
+                    love.graphics.print(name, x + 4, math.round(y + (index - 1) * lineheight + 2, 0))
                 end
             else
                 suggestionsfocus = false

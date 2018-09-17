@@ -1,8 +1,10 @@
 # Lovcon
-Lovcon is a fully-featured in-game console which you can use and edit it as your desires.  
-You can find the full documentation on the [wiki](https://github.com/Quozul/lovcon/wiki).
+Lovcon is a fully-featured in-game console which you can use and edit it as your desires. You can find the full documentation on the [wiki](https://github.com/Quozul/lovcon/wiki).  
+The console comes with some images and cursor, as for the cursors, you can disable them in the [config file](https://github.com/Quozul/lovcon/wiki/Config-file).
 
-The console comes with some images and cursor, as for the cursors, you can disable them in the [config file](https://github.com/Quozul/lovcon/wiki/Config-file)
+**Please note that the console is very ressource heavy when opened, weak systems may lag with it!**
+
+<img src="https://i.imgur.com/1VMfoM2.png" title="Lovcon" alt="Lovcon image"/>
 
 ## Features
 * Command execution (*you can customize the commands*)

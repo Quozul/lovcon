@@ -1,6 +1,7 @@
 console = require "console"
 local window_width, window_height = love.window.getMode()
 
+-- creates a thread for an exemple
 local code = [[
 console = require "console.thread"
 
@@ -11,7 +12,7 @@ console.print(str)
 exemple_thread = love.thread.newThread(code)
 
 function love.load()
-    console.registercallbacks()
+    console.registercallbacks() -- register callbacks
     
     console.print("Game loaded")
     console.print("Here is a fancy console")
@@ -35,10 +36,18 @@ local fps_show, fps_showcount = 0, 0
 local fps_hidden, fps_hiddencount = 0, 0
 local tick, tickRate = 0, 1
 
+-- loag a cursor you want
+local arrow = love.mouse.newCursor( love.image.newImageData("data/console/arrow.png"), 0, 0 )
 function love.update(dt)
+    if not console.hasfocus() then
+        love.mouse.setCursor(arrow) -- sets your own cursor if the console isn't shown
+    end
+
+    -- everything bellow is just a small code that count the average framerates
+    -- used to know the impact of the console over your performaces
     tick = tick + dt
 
-    if tick >= tickRate and record_fps then
+    if tick >= tickRate and record_fps then -- the framerates are recorded every seconds
         if console_show then
             if fps_showcount ~= 0 then
                 fps_show = fps_show + love.timer.getFPS()
@@ -62,6 +71,7 @@ function love.update(dt)
 end
 
 function love.keypressed(key)
+    -- toggles the record fps mode
     if key == "f2" then record_fps = not record_fps end
 end
 
@@ -71,17 +81,23 @@ Press F1 to toggle the console,
 press F2 to record your framerates.]]
 local font = love.graphics.getFont()
 function love.draw()
+    -- prints a text behind the console
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.print(text, round(window_width / 2 - font:getWidth(text) / 2, 0), round(window_height / 2 - font:getHeight(text) / 2, 0))
+    love.graphics.print(text, math.round(window_width / 2 - font:getWidth(text) / 2, 0), math.round(window_height / 2 - font:getHeight(text) / 2, 0))
 
-    love.graphics.print("framerates shown:", 5, 5)
-    love.graphics.print("framerates hidden:", 5, 15)
-    love.graphics.print("difference:", 5, 25)
-    love.graphics.print("current:", 5, 35)
+    -- prints your average fps
+    if record_fps or (fps_showcount + fps_hiddencount) ~= 0 then
+        -- the average fps will be hidden if no value is set
+        love.graphics.print("Framerates shown:", 5, 20)
+        love.graphics.print("Framerates hidden:", 5, 35)
+        love.graphics.print("Difference:", 5, 50)
 
-    local fpsshow, fpshide = fps_show / fps_showcount, fps_hidden / fps_hiddencount
-    love.graphics.print(round(fpsshow, 1), 150, 5)
-    love.graphics.print(round(fpshide, 1), 150, 15)
-    love.graphics.print(round((fpsshow - fpshide) / math.max(fpsshow, fpshide) * 100, 2) .. "%", 150, 25)
-    love.graphics.print(love.timer.getFPS(), 150, 35)
+        local fpsshow, fpshide = fps_show / fps_showcount, fps_hidden / fps_hiddencount
+        love.graphics.print(math.round(fpsshow, 1), 150, 20)
+        love.graphics.print(math.round(fpshide, 1), 150, 35)
+        love.graphics.print(math.round((fpsshow - fpshide) / math.max(fpsshow, fpshide) * 100, 2) .. "%", 150, 50)
+    end
+
+    love.graphics.print("Current framerates:", 5, 5)
+    love.graphics.print(love.timer.getFPS(), 150, 5)
 end

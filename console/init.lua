@@ -40,6 +40,7 @@ local console_readyforinput = true
 console_show = false
 local console_hidden = not console_show
 local console_animation, console_animationtime, console_scale, console_alpha = console_show and "open", 0, 1, 1
+local console_textinputalpha = 0
 
 -- load console cursor
 local arrow = love.mouse.newCursor( love.image.newImageData("console/data/arrow.png"), 0, 0 )
@@ -189,6 +190,12 @@ function console.update(dt)
             console_animation, console_animationtime, console_scale, console_alpha = false, 0, 1, 1
             console_show = false
         end
+    end
+
+    if console_readyforinput then
+        console_textinputalpha = math.min(console_textinputalpha + dt * 10, 1)
+    else
+        console_textinputalpha = math.max(console_textinputalpha - dt * 10, 0)
     end
 
     if console.hasfocus() then love.keyboard.setKeyRepeat(true)
@@ -459,11 +466,11 @@ function console.mousepressed(mx, my, button)
                     end
                 end
 
-                waiting_input = waiting_type
                 time = 0
             end
 
             console_readyforinput = true
+            waiting_input = waiting_type
         elseif inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then -- on close button
             love.mouse.setCursor(down_pointer)
             console_grabbed = false
@@ -682,15 +689,23 @@ function console.draw()
     love.graphics.setLineWidth(1)
 
     setconsolecolor(22, 25, 27, 1)
-    love.graphics.rectangle("fill", console_x + 4, console_y + console_height - 48, console_width - 127, 28) -- text input
+    love.graphics.rectangle("fill", console_x + 4, console_y + console_height - 48, console_width - 48, 28, 5) -- text input
+    
+    -- draw halo
+    if console_textinputalpha > 0 then
+        setconsolecolor(212, 172, 13, console_textinputalpha)
+        love.graphics.rectangle("line", console_x + 4, console_y + console_height - 48, console_width - 125, 28, 5) -- text input
+    end
+
     setconsolecolor(100, 106, 116, 1)
     love.graphics.rectangle("fill", console_x + console_width - 123, console_y + console_height - 48, 119, 28) -- execute command button
+
     setconsolecolor(255, 255, 255, 1)
     love.graphics.print("Execute", console_x + console_width - 115 + math.round(console_font:getWidth("Execute") / 2, 0), console_y + console_height - 42) -- execute button text
 
     -- draw command
     love.graphics.print(command, console_x + 8, console_y + console_height - 42)
-    if console_readyforinput then
+    if console_textinputalpha > 0 then
         local cursor_x = console_x + 8 + console_font:getWidth(command:sub(1, cursor_pos))
 
         if waiting_type == "|" then
@@ -711,7 +726,7 @@ function console.draw()
             end
 
             if #suggestedcommands > 1 then
-                setconsolecolor(22, 25, 27, 1)
+                setconsolecolor(22, 25, 27, console_textinputalpha)
                 local width, height = 0, #suggestedcommands * lineheight
 
                 for _, name in pairs(suggestedcommands) do
@@ -726,7 +741,7 @@ function console.draw()
 
                 local x2, y2 = x + original_x + console_width / 2, y + original_y + console_height / 2
                 if inSquare(mx, my, x2, y2, width, height) then
-                    setconsolecolor(52, 55, 57, 1)
+                    setconsolecolor(52, 55, 57, console_textinputalpha)
                     local hovering = math.trunc((my - y2 - 1) / lineheight)
                     love.graphics.rectangle("fill", x, y + hovering * lineheight, width, lineheight)
 
@@ -740,7 +755,7 @@ function console.draw()
                     suggestionsfocus = false
                 end
 
-                setconsolecolor(255, 255, 255, 1)
+                setconsolecolor(255, 255, 255, console_textinputalpha)
                 for index, name in pairs(suggestedcommands) do
                     love.graphics.print(name, x + 4, math.round(y + (index - 1) * lineheight + 2, 0))
                 end

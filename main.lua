@@ -37,7 +37,7 @@ local fps_hidden, fps_hiddencount = 0, 0
 local tick, tickRate = 0, 1
 
 -- loag a cursor you want
-local arrow = love.mouse.newCursor( love.image.newImageData("data/console/arrow.png"), 0, 0 )
+local arrow = love.mouse.newCursor( love.image.newImageData("console/data/arrow.png"), 0, 0 )
 function love.update(dt)
     if not console.hasfocus() then
         love.mouse.setCursor(arrow) -- sets your own cursor if the console isn't shown

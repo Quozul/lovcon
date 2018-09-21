@@ -6,6 +6,11 @@ function isBetween(value, min, max) return value >= min and value <= max end
 function math.between(value, min, max) return math.max(math.min(value, max), min) end
 function math.round(num, decimals) return math.floor(num * 10^(decimals or 0) + 0.5) / 10^(decimals or 0) end
 function math.trunc(num) return tostring(num):split(".")[1] end
+function math.close(value, steps)
+    local delta = (steps - value) % steps
+    if delta > steps / 2 then return delta - steps
+    else return delta end
+end
 -- I'm very proud of the insert and remove functions :D
 function string:insert(pos, char) return self:sub(1, pos) .. char .. self:sub(pos + 1, self:len()) end
 function string:remove(pos, dir)

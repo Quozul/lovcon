@@ -42,16 +42,17 @@ local console_hidden = not console_show
 local console_animation, console_animationtime, console_scale, console_alpha = console_show and "open", 0, 1, 1
 
 -- load console cursor
-local arrow = love.mouse.newCursor( love.image.newImageData("data/console/arrow.png"), 0, 0 )
-local plus_arrow = love.mouse.newCursor( love.image.newImageData("data/console/plus_arrow.png"), 0, 0 )
-local ibeam = love.mouse.newCursor( love.image.newImageData("data/console/ibeam.png"), 8, 8 )
-local grab = love.mouse.newCursor( love.image.newImageData("data/console/grab.png"), 8, 8 )
-local hand = love.mouse.newCursor( love.image.newImageData("data/console/hand.png"), 8, 8 )
-local pointer = love.mouse.newCursor( love.image.newImageData("data/console/pointer.png"), 5, 1 )
-local resize = love.mouse.newCursor( love.image.newImageData("data/console/size.png"), 8, 8 )
-local cross = love.graphics.newImage("data/console/cross.png")
-local corner = love.graphics.newImage("data/console/corner.png")
-local return_arrow = love.graphics.newImage("data/console/return.png")
+local arrow = love.mouse.newCursor( love.image.newImageData("console/data/arrow.png"), 0, 0 )
+local plus_arrow = love.mouse.newCursor( love.image.newImageData("console/data/plus_arrow.png"), 0, 0 )
+local ibeam = love.mouse.newCursor( love.image.newImageData("console/data/ibeam.png"), 8, 8 )
+local grab = love.mouse.newCursor( love.image.newImageData("console/data/grab.png"), 8, 8 )
+local hand = love.mouse.newCursor( love.image.newImageData("console/data/hand.png"), 8, 8 )
+local pointer = love.mouse.newCursor( love.image.newImageData("console/data/pointer.png"), 5, 1 )
+local down_pointer = love.mouse.newCursor( love.image.newImageData("console/data/down_pointer.png"), 5, 1 )
+local resize = love.mouse.newCursor( love.image.newImageData("console/data/size.png"), 8, 8 )
+local cross = love.graphics.newImage("console/data/cross.png")
+local corner = love.graphics.newImage("console/data/corner.png")
+local return_arrow = love.graphics.newImage("console/data/return.png")
 
 local logs, wrapped_logs = {}, {}
 local command, waiting_input, lastcommand, waiting_type, historypos = "", "_", {}, "_", 0
@@ -361,7 +362,7 @@ end
 function console.wheelmoved(x, y)
     if not console.hasfocus() then return end
 
-    desiredhistorydisplayed = math.between(desiredhistorydisplayed + y * lineheight / 2, -#logs * lineheight + lineheight - padding, print_size)
+    desiredhistorydisplayed = math.between(desiredhistorydisplayed + y * lineheight, -#logs * lineheight + lineheight - padding, print_size)
 end
 
 local suggestionsfocus = false
@@ -390,22 +391,31 @@ function console.mousemoved(mx, my, dx, dy)
     elseif scrollbar_grabbed then -- this isn't very precise yet unfortunatly
         local nd = desiredhistorydisplayed - dy * (#logs * (lineheight * 2) / print_size)
         desiredhistorydisplayed = math.between(nd, -#logs * lineheight + lineheight - padding, print_size)
+        
+        love.mouse.setPosition(
+            math.between(mx, console_x + console_width - 6, console_x + console_width - 1),
+            math.between(my, console_y + 50, console_y + console_height - 69)
+        )
     elseif not console.hasfocus() then
         console_readyforinput = false
     end
 
     -- if the cursors are enabled for the console, then change them
     if console_cursors then
-        if inSquare(mx, my, console_x + console_width - 16, console_y + console_height - 16, 24, 24) then
+        if scrollbar_grabbed then
+            setCursor(down_pointer)
+        elseif inSquare(mx, my, console_x + console_width - 8, scrollbar_y + console_y + 50, 8, scrollbar_height) then -- on scrollbar
+            setCursor(pointer)
+        elseif inSquare(mx, my, console_x + console_width - 16, console_y + console_height - 16, 24, 24) then
             setCursor(resize) -- bottom right corner
-        elseif inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then
-            setCursor(pointer) -- on cross button
+        elseif inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) -- on cross button
+        or inSquare(mx, my, console_x + console_width - 123, console_y + console_height - 48, 119, 28)
+        or suggestionsfocus then
+            setCursor(pointer)
         elseif inSquare(mx, my, console_x + 4, console_y + console_height - 48, console_width - 127, 28) then
             setCursor(ibeam) -- in text input
         elseif inSquare(mx, my, console_x, console_y, console_width, 50) then
             setCursor(hand) -- on console top
-        elseif inSquare(mx, my, console_x + console_width - 123, console_y + console_height - 48, 119, 28) or suggestionsfocus then
-            setCursor(pointer) -- on execute button or on suggested commands
         else
             setCursor(arrow)
         end
@@ -416,7 +426,10 @@ function console.mousepressed(mx, my, button)
     if not console.hasfocus() then return end
 
     if button == 1 and (not console_grabbed or not console_scrollgrabbed) then
-        if inSquare(mx, my, console_x + console_width - 123, console_y + console_height - 48, 119, 28) then -- on execute button
+        if inSquare(mx, my, console_x + console_width - 8, scrollbar_y + console_y + 50, 8, scrollbar_height) then -- on scrollbar
+            scrollbar_grabbed = true
+        elseif inSquare(mx, my, console_x + console_width - 123, console_y + console_height - 48, 119, 28) then -- on execute button
+            love.mouse.setCursor(down_pointer)
             console.runcommand()
         elseif inSquare(mx, my, console_x + console_width - 16, console_y + console_height - 16, 24, 24) then -- on bottom-right corner
             console_cornergrabbed, console_readyforinput = true, false
@@ -452,11 +465,10 @@ function console.mousepressed(mx, my, button)
 
             console_readyforinput = true
         elseif inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then -- on close button
+            love.mouse.setCursor(down_pointer)
             console_grabbed = false
             console_hidden = true
             console_animation = "close"
-        elseif inSquare(mx, my, console_x + console_width - 8, scrollbar_y + console_y + 50, 8, scrollbar_height) then -- on scrollbar
-            scrollbar_grabbed = true
         elseif not suggestionsfocus then
             console_readyforinput = false
         end
@@ -512,10 +524,6 @@ local function drop_console(mx)
     console_cornergrabbed = false
 end
 
-function console.mousefocus(focus)
-    drop_console()
-end
-
 function console.mousereleased(mx, my)
     drop_console(mx)
     console_x, console_y = math.round(console_x, 0), math.round(console_y, 0)
@@ -523,7 +531,17 @@ function console.mousereleased(mx, my)
 
     scrollbar_grabbed = false
 
+    desiredhistorydisplayed = desiredhistorydisplayed + math.close(desiredhistorydisplayed, lineheight)
+
     wraplogs()
+
+    if love.mouse.getCursor() == down_pointer then
+        love.mouse.setCursor(pointer)
+    end
+end
+
+function console.mousefocus(focus)
+    drop_console()
 end
 
 local function setconsolecolor(r, g, b, a)
@@ -637,9 +655,12 @@ function console.draw()
             end
 
             if love.mouse.isDown(1) then
-                if inSquare(mx, my, original_x, log_yy, console_width, log_height) then
-                    local text = ("%s %s [%s]: %s\n"):format(log.time, log.from, log.letter, log.event)
-                    love.system.setClipboardText(text)
+                if not console_grabbed and not scrollbar_grabbed then
+                    if inSquare(mx, my, original_x, log_yy, console_width - 8, log_height) then
+                        local text = ("%s %s [%s]: %s\n"):format(log.time, log.from, log.letter, log.event)
+                        love.mouse.setCursor(plus_arrow)
+                        love.system.setClipboardText(text)
+                    end
                 end
             end
         end
@@ -740,7 +761,6 @@ function console.draw()
     -- scroll bar
     love.graphics.translate(console_x + console_width - 8, -console_height / 2 + 50)
     setconsolecolor(22, 25, 27, 1)
-
     love.graphics.rectangle("fill", 0, scrollbar_y, 8, scrollbar_height)
 
     love.graphics.origin()

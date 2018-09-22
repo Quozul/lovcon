@@ -1,4 +1,5 @@
-require "console/utility"
+require "console/utils"
+local multikeys = require "console/multi-key"
 console_channel = love.thread.newChannel()
 
 local console = {}
@@ -11,7 +12,7 @@ local console_x, console_y = window_width / 2 - console_width / 2, window_height
 local console_font = console_config.font or love.graphics.getFont()
 local lineheight, timewidth = console_font:getHeight() + 4, console_font:getWidth("00:00:00")
 local console_loglimit, console_openkey = console_config.limit, console_config.openkey or "f1"
-local console_cursors = console_config.cursors
+local console_cursors, console_enabledanimation = console_config.cursors, console_config.animations
 
 local console_magnetized = false
 local console_oldsize = {width = console_width, height = console_height}
@@ -36,7 +37,7 @@ local suggestedcommands = commandlist
 local console_grabbed = false
 local console_scrollgrabbed = false
 local console_cornergrabbed = false
-local console_readyforinput = true
+console_readyforinput = true
 console_show = false
 local console_hidden = not console_show
 local console_animation, console_animationtime, console_scale, console_alpha = console_show and "open", 0, 1, 1
@@ -56,9 +57,9 @@ local corner = love.graphics.newImage("console/data/corner.png")
 local return_arrow = love.graphics.newImage("console/data/return.png")
 
 local logs, wrapped_logs = {}, {}
-local command, waiting_input, lastcommand, waiting_type, historypos = "", "_", {}, "_", 0
+local command, lastcommand, historypos = "", {}, 0
+local cursor_pos1, cursor_pos2, showcursor, largeselect = 0, 0, true, largeselect
 local time = 0
-local cursor_pos = 0
 local historydisplayed, desiredhistorydisplayed = 0, lineheight
 local tabpos = 1 -- used when tabulation is pressed
 
@@ -175,21 +176,25 @@ function console.update(dt)
         historydisplayed = historydisplayed + difference * speed
     end
 
-    if console_animation == "open" then
-        console_animationtime = console_animationtime + dt
-        console_scale = outElastic(console_animationtime, 0, 1, 1, 1, 1)
+    if console_enabledanimation then
+        if console_animation == "open" then
+            console_animationtime = console_animationtime + dt
+            console_scale = outElastic(console_animationtime, 0, 1, 1, 1, 1)
 
-        if console_animationtime >= 1 then
-            console_animation, console_animationtime, console_scale, console_alpha = false, 0, 1, 1
+            if console_animationtime >= 1 then
+                console_animation, console_animationtime, console_scale, console_alpha = false, 0, 1, 1
+            end
+        elseif console_animation == "close" then
+            console_animationtime = console_animationtime + dt
+            console_alpha = console_alpha - dt / .25
+
+            if console_animationtime >= .25 then
+                console_animation, console_animationtime, console_scale, console_alpha = false, 0, 1, 1
+                console_show = false
+            end
         end
     elseif console_animation == "close" then
-        console_animationtime = console_animationtime + dt
-        console_alpha = console_alpha - dt / .25
-
-        if console_animationtime >= .25 then
-            console_animation, console_animationtime, console_scale, console_alpha = false, 0, 1, 1
-            console_show = false
-        end
+        console_animation, console_show = false, false
     end
 
     if console_readyforinput then
@@ -202,9 +207,11 @@ function console.update(dt)
     else love.keyboard.setKeyRepeat(false) end
 
     time = time + dt
-    if time >= .5 then
-        if waiting_input == "" then waiting_input = waiting_type
-        else waiting_input = "" end
+    if largeselect or cursor_pos2 - cursor_pos1 ~= 0 then
+        time = 0
+        showcursor = true
+    elseif time >= .5 then
+        showcursor = not showcursor
         time = 0
     end
 
@@ -264,7 +271,7 @@ function console.runcommand()
         console.print("List of valid commands: " .. commandlist_text, 2)
     end
 
-    command, cursor_pos = "", 0
+    command, cursor_pos1, cursor_pos2 = "", 0, 0
     tabpos = 1 -- reset the position of the tab shortcut
     historydisplayed = historydisplayed - lineheight
 end
@@ -287,32 +294,99 @@ function console.keypressed(key)
         return
     end
 
-    if not console.hasfocus() or not console_readyforinput then return end
+    if not console_show or not console_readyforinput then return end
 
-    if key == "return" or key == "kpenter" then
+    multikeys.keypressed(key)
+
+    local ctrls = multikeys.isDown("lctrl") or multikeys.isDown("rctrl")
+    local shifts = multikeys.isDown("lshift") or multikeys.isDown("rshift")
+
+    if ctrls then
+        if key == "a" then
+            cursor_pos1, cursor_pos2 = 0, command:len()
+        elseif key == "v" then
+            if cursor_pos2 - cursor_pos1 ~= 0 then
+                command, p = command:remove(cursor_pos1, cursor_pos2)
+                if math.sign(p) then p = 0 end
+
+                cursor_pos1 = cursor_pos1 + p
+                cursor_pos2 = cursor_pos1
+            end
+
+            local content = love.system.getClipboardText()
+            command = command:insert(cursor_pos1, content)
+            local p = cursor_pos1 + content:len()
+            cursor_pos1, cursor_pos2 = p, p
+        elseif key == "c" then
+            local from, to = cursor_pos1, cursor_pos2
+            if from > to then -- from is greater
+                local temp = from
+                from = to
+                to = temp
+            end
+            love.system.setClipboardText(command:sub(from + 1, to))
+        end
+
+        if key == "left" then
+            cursor_pos1 = cursor_pos1 - 1
+            cursor_pos2 = cursor_pos1
+        elseif key == "right" then
+            cursor_pos1 = cursor_pos1 + 1
+            cursor_pos2 = cursor_pos1
+        elseif key == "up" then
+            cursor_pos1 = 0
+            cursor_pos2 = cursor_pos1
+        elseif key == "down" then
+            cursor_pos1 = command:len()
+            cursor_pos2 = cursor_pos1
+        end
+    elseif shifts then
+        if key == "left" then
+            cursor_pos2 = cursor_pos2 - 1
+        elseif key == "right" then
+            cursor_pos2 = cursor_pos2 + 1
+        elseif key == "up" then
+            cursor_pos2 = 0
+        elseif key == "down" then
+            cursor_pos2 = command:len()
+        end
+    elseif key == "return" or key == "kpenter" then
         console.runcommand() -- run the command
     elseif key == "backspace" then
-        if cursor_pos ~= 0 then
-            command = command:remove(cursor_pos) -- delete backward
-            cursor_pos = math.max(cursor_pos - 1, 0)
-        end
+        local p, pos2
+
+        if cursor_pos2 - cursor_pos1 == 0 then pos2 = cursor_pos2 - 1
+        else pos2 = cursor_pos2 end
+
+        command, p = command:remove(cursor_pos1, pos2) -- delete backward
+        if math.sign(p) then p = 0 end
+
+        cursor_pos1 = cursor_pos1 + p
+        cursor_pos2 = cursor_pos1
     elseif key == "delete" then
-        command = command:remove(cursor_pos, true) -- delete forward
+        local p
+
+        command, p = command:remove(cursor_pos1, cursor_pos2) -- delete forward
+        if math.sign(p) then p = 0 end
+        
+        cursor_pos1 = cursor_pos1 + p
+        cursor_pos2 = cursor_pos1
     elseif key == "up" then
         historypos = math.max(historypos - 1, 1)
         command = lastcommand[historypos] or "" -- sets the command to the latest one
-        cursor_pos = command:len() or 0
+        local p = command:len() or 0
+        cursor_pos1, cursor_pos2 = p, p
     elseif key == "down" then
         historypos = math.min(historypos + 1, #lastcommand + 1)
         command = lastcommand[historypos] or "" -- sets the command to the newest one
-        cursor_pos = command:len() or 0
+        local p = command:len() or 0
+        cursor_pos1, cursor_pos2 = p, p
     elseif key == "left" then
-        cursor_pos = math.between(cursor_pos - 1, 0, command:len())
+        local p = cursor_pos1 - 1
+        cursor_pos1, cursor_pos2 = p, p
     elseif key == "right" then
-        cursor_pos = math.between(cursor_pos + 1, 0, command:len())
-    elseif key == "rctrl" then -- pasting commands
-        command = command .. love.system.getClipboardText()
-        cursor_pos = command:len()
+        local p = cursor_pos1 + 1
+        cursor_pos1, cursor_pos2 = p, p
     elseif key == "tab" then
         if #suggestedcommands > 0 then -- go throught all the suggested commands
             if tabpos > #suggestedcommands then
@@ -328,15 +402,15 @@ function console.keypressed(key)
             end
         end
 
-        cursor_pos = command:len() or 0
+        local p = command:len() or 0
+        cursor_pos1, cursor_pos2 = p, p
     end
-
-    if cursor_pos < command:len() then waiting_type, waiting_input = "|", "|"
-    else waiting_type, waiting_input = "_", "_" end
 
     if command:len() == 0 then suggestedcommands = commandlist end
 
     if command == "" then tabpos = 1 end
+
+    cursor_pos1, cursor_pos2 = math.between(cursor_pos1, 0, command:len()), math.between(cursor_pos2, 0, command:len())
 
     if key == "backspace" or key == "delete" then
         if #suggestedcommands <= 1 then
@@ -346,12 +420,25 @@ function console.keypressed(key)
     end
 end
 
+function console.keyreleased(key)
+    multikeys.keyreleased(key)
+end
+
 local maxcmdlen = console_width - 127
 function console.textinput(text)
-    if not console.hasfocus() or not console_readyforinput then return end
+    if not console_show or not console_readyforinput then return end
 
-    command = command:insert(cursor_pos, text)
-    cursor_pos = cursor_pos + 1
+    if cursor_pos2 - cursor_pos1 ~= 0 then
+        command, p = command:remove(cursor_pos1, cursor_pos2)
+        if math.sign(p) then p = 0 end
+
+        cursor_pos1 = cursor_pos1 + p
+        cursor_pos2 = cursor_pos1
+    end
+
+    command = command:insert(cursor_pos1, text)
+    cursor_pos1 = cursor_pos1 + 1
+    cursor_pos2 = cursor_pos1
 
     suggestedcommands = completeValue(command, commandlist)
 end
@@ -370,6 +457,33 @@ function console.wheelmoved(x, y)
     if not console.hasfocus() then return end
 
     desiredhistorydisplayed = math.between(desiredhistorydisplayed + y * lineheight, -#logs * lineheight + lineheight - padding, print_size)
+end
+
+-- sets the position of the cursor relative to the mouse, between chracters
+local function getclickpos(mx)
+    local remchars = 0
+    local command_length = console_font:getWidth(command:sub(1, remchars))
+
+    local mouseontext = mx - console_x - 8
+    local position = nil
+
+    while remchars <= command:len() do
+        local prechar, nextchar = console_font:getWidth(command:sub(remchars, remchars)) / 2, console_font:getWidth(command:sub(remchars + 1, remchars + 1)) / 2
+        command_length = console_font:getWidth(command:sub(1, remchars))
+        remchars = remchars + 1
+
+        if isBetween(mouseontext, command_length - prechar, command_length + nextchar) then
+            position = remchars - 1
+        elseif remchars == command:len() then
+            position = command:len()
+        end
+
+        if position then
+            return position
+        end
+    end
+
+    time = 0
 end
 
 local suggestionsfocus = false
@@ -403,8 +517,6 @@ function console.mousemoved(mx, my, dx, dy)
             math.between(mx, console_x + console_width - 6, console_x + console_width - 1),
             math.between(my, console_y + 50, console_y + console_height - 69)
         )
-    elseif not console.hasfocus() then
-        console_readyforinput = false
     end
 
     -- if the cursors are enabled for the console, then change them
@@ -419,8 +531,12 @@ function console.mousemoved(mx, my, dx, dy)
         or inSquare(mx, my, console_x + console_width - 123, console_y + console_height - 48, 119, 28)
         or suggestionsfocus then
             setCursor(pointer)
-        elseif inSquare(mx, my, console_x + 4, console_y + console_height - 48, console_width - 127, 28) then
-            setCursor(ibeam) -- in text input
+        elseif inSquare(mx, my, console_x + 4, console_y + console_height - 48, console_width - 127, 28) then -- in text input
+            setCursor(ibeam)
+
+            if console_readyforinput and command ~= "" and largeselect then
+                cursor_pos2 = getclickpos(mx)
+            end
         elseif inSquare(mx, my, console_x, console_y, console_width, 50) then
             setCursor(hand) -- on console top
         else
@@ -430,7 +546,12 @@ function console.mousemoved(mx, my, dx, dy)
 end
 
 function console.mousepressed(mx, my, button)
-    if not console.hasfocus() then return end
+    if console_show and not console.hasfocus() then
+        console_readyforinput = false
+        return
+    elseif not console.hasfocus() then
+        return
+    end
 
     if button == 1 and (not console_grabbed or not console_scrollgrabbed) then
         if inSquare(mx, my, console_x + console_width - 8, scrollbar_y + console_y + 50, 8, scrollbar_height) then -- on scrollbar
@@ -440,37 +561,18 @@ function console.mousepressed(mx, my, button)
             console.runcommand()
         elseif inSquare(mx, my, console_x + console_width - 16, console_y + console_height - 16, 24, 24) then -- on bottom-right corner
             console_cornergrabbed, console_readyforinput = true, false
-        elseif inSquare(mx, my, console_x, console_y, console_width, 50) and not inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then -- on window top
+        elseif inSquare(mx, my, console_x, console_y, console_width, 50) and
+        not inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then -- on window top
             console_grabbed, console_readyforinput = true, false
             console_grabpoints = {x = mx - console_x, y = my - console_y}
         elseif inSquare(mx, my, console_x + 4, console_y + console_height - 48, console_width - 127, 28) then -- on text input
-            if console_readyforinput and command ~= "" then -- sets the position of the cursor relative to the mouse, between chracters
-                local remchars = 0
-                local command_length = console_font:getWidth(command:sub(1, remchars))
-
-                local mouseontext = mx - console_x - 8
-
-                while remchars <= command:len() do
-                    local prechar, nextchar = console_font:getWidth(command:sub(remchars, remchars)) / 2, console_font:getWidth(command:sub(remchars + 1, remchars + 1)) / 2
-                    command_length = console_font:getWidth(command:sub(1, remchars))
-                    remchars = remchars + 1
-
-                    if isBetween(mouseontext, command_length - prechar, command_length + nextchar) then
-                        cursor_pos = remchars - 1
-                        waiting_type = "|"
-                        break
-                    elseif remchars == command:len() then
-                        cursor_pos = command:len()
-                        waiting_type = "_"
-                        break
-                    end
-                end
-
-                time = 0
+            if console_readyforinput and command ~= "" then
+                largeselect = true
+                local p = getclickpos(mx)
+                cursor_pos1, cursor_pos2 = p, p
             end
 
             console_readyforinput = true
-            waiting_input = waiting_type
         elseif inSquare(mx, my, console_x + console_width - 32, console_y + 16, 16, 16) then -- on close button
             love.mouse.setCursor(down_pointer)
             console_grabbed = false
@@ -537,6 +639,7 @@ function console.mousereleased(mx, my)
     console_width, console_height = math.round(console_width, 0), math.round(console_height, 0)
 
     scrollbar_grabbed = false
+    largeselect = false
 
     desiredhistorydisplayed = desiredhistorydisplayed + math.close(desiredhistorydisplayed, lineheight)
 
@@ -704,15 +807,14 @@ function console.draw()
     love.graphics.print("Execute", console_x + console_width - 115 + math.round(console_font:getWidth("Execute") / 2, 0), console_y + console_height - 42) -- execute button text
 
     -- draw command
-    love.graphics.print(command, console_x + 8, console_y + console_height - 42)
     if console_textinputalpha > 0 then
-        local cursor_x = console_x + 8 + console_font:getWidth(command:sub(1, cursor_pos))
-
-        if waiting_type == "|" then
-            cursor_x = cursor_x - 2
+        if showcursor then
+            local cursor_x = console_x + 8 + console_font:getWidth( string.sub(command, 1, cursor_pos1) ) - .5
+            local cursor_width = (console_x + 8 + console_font:getWidth( string.sub(command, 1, cursor_pos2) )) - cursor_x + .5
+            setconsolecolor(142, 145, 147, .5)
+            love.graphics.rectangle("fill", cursor_x, console_y + console_height - 42, cursor_width, 16)
+            setconsolecolor(255, 255, 255, 1)
         end
-
-        love.graphics.print(waiting_input, cursor_x, console_y + console_height - 42)
 
         if command ~= "" then
             local possiblecommands = completeValue(command, commandlist)
@@ -736,7 +838,7 @@ function console.draw()
                     end
                 end
 
-                local x, y = console_x + 8 + console_font:getWidth(command:sub(1, cursor_pos)), console_y + console_height - 54 - height
+                local x, y = console_x + 8 + console_font:getWidth(command:sub(1, cursor_pos2)), console_y + console_height - 54 - height
                 love.graphics.rectangle("fill", x, y, width, height)
 
                 local x2, y2 = x + original_x + console_width / 2, y + original_y + console_height / 2
@@ -747,7 +849,8 @@ function console.draw()
 
                     if love.mouse.isDown(1) then
                         command = suggestedcommands[hovering+1]
-                        cursor_pos = command:len()
+                        local p = command:len()
+                        cursor_pos1, cursor_pos2 = p, p
                     end
 
                     suggestionsfocus = true
@@ -769,6 +872,9 @@ function console.draw()
         suggestionsfocus = false
     end
 
+    setconsolecolor(255, 255, 255, 1)
+    love.graphics.print(command, console_x + 8, console_y + console_height - 42)
+
     -- bottom right corner
     setconsolecolor(55, 55, 55, 1)
     love.graphics.draw(corner, console_x + console_width - 16, console_y + console_height - 16)
@@ -781,7 +887,10 @@ function console.draw()
     love.graphics.origin()
 end
 
-local callbacks = {"update", "textinput", "keypressed", "wheelmoved", "mousepressed", "mousereleased", "resize", "mousefocus", "draw", "mousemoved"}
+local callbacks = {
+    "update", "textinput", "keypressed", "keyreleased", "wheelmoved", "mousepressed",
+    "mousereleased", "resize", "mousefocus", "draw", "mousemoved"
+}
 function console.registercallbacks()
 	local registry = {}
     for _, f in ipairs(callbacks) do

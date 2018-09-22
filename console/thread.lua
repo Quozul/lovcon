@@ -1,4 +1,4 @@
-require "console/utility"
+require "console/utils"
 
 local console = {}
 

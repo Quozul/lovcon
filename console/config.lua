@@ -4,5 +4,6 @@ return {
     font = nil,
     limit = nil, -- limit of logs, nil for no limit
     openkey = "f1", -- default key to open the console
-    cursors = true, -- toggle the console's cursors
+    cursors = true, -- toggles the console's cursors
+    animations = true, -- open and close animation
 }

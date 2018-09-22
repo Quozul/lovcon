@@ -7,9 +7,11 @@ return {
         requiredarguments = 0, -- no arguments are required
         execution = function(command)
             if command == "" then
-                console.print("Please enter a valie lua script", 2)
+                console.print("Please enter a valid lua script", 2)
                 return false
             end
+
+            console.print("Running lua script... " .. command, 1)
             loadstring(command)()
         end,
         usage = "lua [lua script]",
@@ -19,6 +21,7 @@ return {
     print = {
         requiredarguments = 0, -- increasing this number let the console verify for arguments so they are required
         execution = function(command)
+            console.print("Printing... " .. command, 1)
             local value = loadstring("return " .. command)()
             console.print(value)
         end,
@@ -52,7 +55,7 @@ return {
                 if not name or not time or not command then
                     return true -- returning true make the console display the usage for the command
                 end
-                console.print("Repeating command " .. name .. " every " .. time .. " seconds")
+                console.print("Repeating command " .. name .. " every " .. time .. " seconds", 1)
 
                 console.addtomemory("loop", name, {
                     every = time,
@@ -75,7 +78,7 @@ return {
                 end
                 
                 if list ~= "" then
-                    console.print("Repeated commands: " .. list)
+                    console.print("Repeated commands: " .. list, 1)
                 else
                     console.print("There are no commands being repeated", 1)
                 end
@@ -100,6 +103,7 @@ return {
     exit = {
         requiredarguments = -1, -- disables the arguments check
         execution = function()
+            console.print("Closing the game", 1)
             love.event.quit()
         end,
         usage = "exit",
@@ -109,6 +113,7 @@ return {
     threadprint = {
         requiredarguments = 0,
         execution = function(command)
+            console.print("Printing value from thread... " .. command, 1)
             local value = loadstring("return " .. command)()
             exemple_thread:start(value)
         end,

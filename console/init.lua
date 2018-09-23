@@ -59,6 +59,7 @@ local return_arrow = love.graphics.newImage("console/data/return.png")
 local logs, wrapped_logs = {}, {}
 local command, lastcommand, historypos = "", {}, 0
 local cursor_pos1, cursor_pos2, showcursor, largeselect = 0, 0, true, largeselect
+local fake_cursor1, fake_cursor2, cursor_alpha, cursor_alphadir = cursor_pos1, cursor_pos2, 1, true
 local time = 0
 local historydisplayed, desiredhistorydisplayed = 0, lineheight
 local tabpos = 1 -- used when tabulation is pressed
@@ -170,10 +171,52 @@ function console.update(dt)
     if not console_show then return end
     -- everything bellow will not be executed if the console isn't shown
 
-    local difference = desiredhistorydisplayed - historydisplayed
-    if difference ~= 0 then
-        local speed = (dt * lineheight * 1.5)
-        historydisplayed = historydisplayed + difference * speed
+    if console_enabledanimation then
+        local diff = desiredhistorydisplayed - historydisplayed
+        if diff ~= 0 then
+            local speed = (dt * lineheight * 1.5)
+            historydisplayed = historydisplayed + diff * speed
+        end
+
+        local diff1 = console_font:getWidth( string.sub(command, 1, cursor_pos1) ) - fake_cursor1
+        local diff2 = console_font:getWidth( string.sub(command, 1, cursor_pos2) ) - fake_cursor2
+        if diff1 + diff2 ~= 0 then
+            local speed = (dt * 20)
+            fake_cursor1 = fake_cursor1 + diff1 * speed
+            fake_cursor2 = fake_cursor2 + diff2 * speed
+        end
+
+        time = time + dt
+        if largeselect or cursor_pos2 - cursor_pos1 ~= 0 then
+            time = 0
+            cursor_alpha = 1
+        elseif cursor_alpha == 0 or cursor_alpha == 1 then
+            time = 0
+            cursor_alphadir = not cursor_alphadir
+        end
+
+        if cursor_alphadir then
+            cursor_alpha = math.min(cursor_alpha + dt * 2, 1)
+        else
+            cursor_alpha = math.max(cursor_alpha - dt * 2, 0)
+        end
+
+        if console_readyforinput then
+            console_textinputalpha = math.min(console_textinputalpha + dt * 10, 1)
+        else
+            console_textinputalpha = math.max(console_textinputalpha - dt * 10, 0)
+        end
+    else
+        historydisplayed = desiredhistorydisplayed
+
+        fake_cursor1 = console_font:getWidth( string.sub(command, 1, cursor_pos1) )
+        fake_cursor2 = console_font:getWidth( string.sub(command, 1, cursor_pos2) )
+        
+        if console_readyforinput then
+            console_textinputalpha = 1
+        else
+            console_textinputalpha = 0
+        end
     end
 
     if console_enabledanimation then
@@ -197,23 +240,8 @@ function console.update(dt)
         console_animation, console_show = false, false
     end
 
-    if console_readyforinput then
-        console_textinputalpha = math.min(console_textinputalpha + dt * 10, 1)
-    else
-        console_textinputalpha = math.max(console_textinputalpha - dt * 10, 0)
-    end
-
     if console.hasfocus() then love.keyboard.setKeyRepeat(true)
     else love.keyboard.setKeyRepeat(false) end
-
-    time = time + dt
-    if largeselect or cursor_pos2 - cursor_pos1 ~= 0 then
-        time = 0
-        showcursor = true
-    elseif time >= .5 then
-        showcursor = not showcursor
-        time = 0
-    end
 
     local container_h = print_size + lineheight
     local object_h    = #logs * lineheight + padding - lineheight
@@ -295,6 +323,8 @@ function console.keypressed(key)
     end
 
     if not console_show or not console_readyforinput then return end
+
+    cursor_alphadir = true
 
     multikeys.keypressed(key)
 
@@ -440,6 +470,8 @@ function console.textinput(text)
     cursor_pos1 = cursor_pos1 + 1
     cursor_pos2 = cursor_pos1
 
+    cursor_alphadir = true
+
     suggestedcommands = completeValue(command, commandlist)
 end
 
@@ -570,6 +602,7 @@ function console.mousepressed(mx, my, button)
                 largeselect = true
                 local p = getclickpos(mx)
                 cursor_pos1, cursor_pos2 = p, p
+                cursor_alphadir = true
             end
 
             console_readyforinput = true
@@ -808,13 +841,11 @@ function console.draw()
 
     -- draw command
     if console_textinputalpha > 0 then
-        if showcursor then
-            local cursor_x = console_x + 8 + console_font:getWidth( string.sub(command, 1, cursor_pos1) ) - .5
-            local cursor_width = (console_x + 8 + console_font:getWidth( string.sub(command, 1, cursor_pos2) )) - cursor_x + .5
-            setconsolecolor(142, 145, 147, .5)
-            love.graphics.rectangle("fill", cursor_x, console_y + console_height - 42, cursor_width, 16)
-            setconsolecolor(255, 255, 255, 1)
-        end
+        local cursor_x = console_x + 8 + fake_cursor1 - .5
+        local cursor_width = console_x + 8 + (fake_cursor2 - cursor_x) + .5
+        setconsolecolor(142, 145, 147, cursor_alpha)
+        love.graphics.rectangle("fill", cursor_x, console_y + console_height - 42, cursor_width, 16)
+        setconsolecolor(255, 255, 255, 1)
 
         if command ~= "" then
             local possiblecommands = completeValue(command, commandlist)
@@ -838,7 +869,7 @@ function console.draw()
                     end
                 end
 
-                local x, y = console_x + 8 + console_font:getWidth(command:sub(1, cursor_pos2)), console_y + console_height - 54 - height
+                local x, y = console_x + 8 + fake_cursor2, console_y + console_height - 54 - height
                 love.graphics.rectangle("fill", x, y, width, height)
 
                 local x2, y2 = x + original_x + console_width / 2, y + original_y + console_height / 2

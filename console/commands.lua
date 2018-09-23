@@ -103,8 +103,11 @@ return {
     exit = {
         requiredarguments = -1, -- disables the arguments check
         execution = function()
-            console.print("Closing the game", 1)
-            love.event.quit()
+            local pressedbutton = love.window.showMessageBox("Close the game", "Are you sure you want to close the game?", {"Yes", "No"})
+            if pressedbutton == 1 then
+                console.print("Closing the game", 1)
+                love.event.quit()
+            end
         end,
         usage = "exit",
         description = "Close the game",
